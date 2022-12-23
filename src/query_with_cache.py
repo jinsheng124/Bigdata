@@ -265,7 +265,7 @@ def run_sql_query(query,
 if __name__ == "__main__":
     res = run_sql_query('SELECT * FROM test',db = 'sj')
     print(res)
-    res = run_sql_query('SELECT `day` FROM test',db = 'sj')
+    res = run_sql_query('SELECT * FROM test',db = 'sj')
     # 打印子线程
     import traceback
     for thread_id, frame in sys._current_frames().items():
