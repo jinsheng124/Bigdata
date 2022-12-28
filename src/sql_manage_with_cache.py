@@ -181,7 +181,7 @@ class Query:
                     host = 'localhost',
                     user = 'root',
                     password = '123456',
-                    db = 'ref_bigdata',
+                    db = 'sj',
                     args = None,
                     return_dict: bool = False,
                     autocommit: bool = False,
@@ -235,7 +235,7 @@ def run_sql_query(query,
                   host = 'localhost',
                   user = 'root',
                   password = '123456',
-                  db = 'ref_bigdata',
+                  db = 'sj',
                   args = None,
                   return_dict: bool = False,
                   autocommit: bool = True,
@@ -284,13 +284,13 @@ def run_sql_query(query,
         data = data[0]
     return data
 if __name__ == "__main__":
-    _ = run_sql_query("select * from error_record where e_date = '2022-06-30'")
-    _ = run_sql_query("select * from error_record where e_date = '2022-06-30'")
+    _ = run_sql_query("select * from test")
+    _ = run_sql_query("select * from test")
     
     ex_fun.cache_enable = False
     
-    _ = run_sql_query("select * from error_record where e_date = '2022-06-30'")
+    _ = run_sql_query("select * from test")
     # ex_fun.cache_enable = True
-    _ = run_sql_query("select * from error_record where e_date = '2022-06-30'")
-    _ = run_sql_query("select * from error_record where e_date = '2022-06-30'")
+    _ = run_sql_query("select * from test")
+    _ = run_sql_query("select * from test")
     # ex_fun.clearcache()

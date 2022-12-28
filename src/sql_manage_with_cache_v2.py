@@ -172,7 +172,7 @@ class Query:
                     host = 'localhost',
                     user = 'root',
                     password = '123456',
-                    db = 'ref_bigdata',
+                    db = 'sj',
                     args = None,
                     return_dict: bool = False,
                     autocommit: bool = False,
@@ -218,7 +218,7 @@ def timeit(fun):
     return wrapper
 
 # 缓存中间件
-ex_fun = Query(max_size=20000,nx = (1800,18000))
+ex_fun = Query(max_size=20000,nx = (1,3))
 
 @timeit
 @ex_fun
@@ -226,7 +226,7 @@ def run_sql_query(query,
                   host = 'localhost',
                   user = 'root',
                   password = '123456',
-                  db = 'ref_bigdata',
+                  db = 'sj',
                   args = None,
                   return_dict: bool = False,
                   autocommit: bool = True,
@@ -275,8 +275,9 @@ def run_sql_query(query,
         data = data[0]
     return data
 if __name__ == "__main__":
-    _ = run_sql_query("select * from test",db ='sj')
-    _ = run_sql_query("select * from test",db ='sj')
+    _ = run_sql_query("select * from test")
+    time.sleep(1)
+    _ = run_sql_query("select * from test")
     
     # ex_fun.cache_enable = False
     
