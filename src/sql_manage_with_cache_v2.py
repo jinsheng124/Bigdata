@@ -68,7 +68,7 @@ class QueryInfo:
         # 默认停留时间为1个月
         self._nx = 60 * 60 * 24 * 3
         self.heartbeat = 3
-        self.e_time_pool = []
+        self.e_time_pool = {}
         self.keep_alive = True
         # 启动线程
         self.check_thread = Thread(target=self.check_e_time)
@@ -80,6 +80,11 @@ class QueryInfo:
         e_time为过期时刻,若当前时刻大于过期时刻,回收key并返回,否则返回value
         '''
         key = query()
+        c_time = self.e_time_pool.get(key,-1)
+        if c_time > time.time() and c_time != -1:
+            self.e_time_pool.pop(key)
+            self.lru_cache.dels(key)
+            return
         res = self.lru_cache.query(key)
         return res
 
@@ -101,19 +106,10 @@ class QueryInfo:
         else:
             e_time = time.time() + self._nx
         self.lru_cache.put(key,value)
-
-        # 二分插入
-        low = 0
-        high = len(self.e_time_pool)-1
-        while low <= high:
-            mid = (low + high)//2
-            if self.e_time_pool[mid][1] < e_time:
-                low = mid + 1
-            elif self.e_time_pool[mid][1] > e_time:
-                high = mid - 1
-            else:
-                break
-        self.e_time_pool.insert(low,(key,e_time))
+        if key in self.e_time_pool and self.e_time_pool[key] > e_time:
+            return
+        self.e_time_pool[key] = e_time
+        self.key_pool.append(key)
     def _clear(self,):
         self.keep_alive = False
         self.e_time_pool.clear()
@@ -121,15 +117,15 @@ class QueryInfo:
     def check_e_time(self):
         while self.keep_alive:
             f_time = time.time()
-            while len(self.e_time_pool) > 0:
-                key,e_time = self.e_time_pool[0]
-                if f_time < e_time:
-                    break
-                self.e_time_pool.pop(0)
-                self.lru_cache.dels(key)
+            keys = list(self.e_time_pool.keys())
+            for k in keys:
+                if f_time >= self.e_time_pool[k]:
+                    self.e_time_pool.pop(k)
+                    self.lru_cache.dels(key)
             time.sleep(self.heartbeat)
     def start_check_thread(self):
-        if self.check_thread:
+        self.keep_alive = True
+        if self.check_thread and not self.check_thread.is_alive():
             self.check_thread.start()
         else:
             print('打开监控线程失败！')
@@ -179,7 +175,7 @@ class Query:
                     muti_query: bool = False,
                     ex_many_mode: bool = False):
             if self.cache_enable:
-                self.query_info.keep_alive = True
+                self.query_info.start_check_thread()
                 data = None
                 flag = self.check_query(query)
                 low_query = self._lower(query)
