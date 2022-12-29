@@ -127,8 +127,6 @@ class QueryInfo:
         self.keep_alive = True
         if self.check_thread and not self.check_thread.is_alive():
             self.check_thread.start()
-        else:
-            print('打开监控线程失败！')
 
 # 缓存结构
 class Query:
