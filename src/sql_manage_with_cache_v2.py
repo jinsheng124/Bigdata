@@ -5,7 +5,7 @@ from collections import OrderedDict
 import sys
 import warnings
 import random
-from threading import Thread
+from threading import Thread,Lock
 import json
 import pymysql
 
@@ -78,6 +78,7 @@ class QueryInfo:
         self.keep_alive = True
         # 启动线程
         self.check_thread = None
+        self.lock = Lock()
 
     def _get_info(self,query:QueryStruct):
         '''
@@ -140,12 +141,14 @@ class QueryInfo:
             time.sleep(self.heartbeat)
     def start_check_thread(self):
         self.keep_alive = True
+        self.lock.acquire()
         if (self.check_thread and not self.check_thread.is_alive()) or (self.check_thread is None):
             self.check_thread = None
             self.check_thread = Thread(target=self.check_e_time)
             self.check_thread.setDaemon(daemonic=True)
             self.check_thread.start()
             print("启动监控线程！")
+        self.lock.release()
 
 # 缓存结构
 class Query:
