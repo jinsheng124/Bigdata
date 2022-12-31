@@ -107,12 +107,17 @@ class QueryInfo:
         # p_key为被LRU淘汰的键值,若存在，同步淘汰e_time_pool的键值
         p_key = self.lru_cache.put(key,value)
         if p_key:
-            self.e_time_pool.pop(p_key)
+            self.safe_pop(self.e_time_pool,p_key)
         # 若插入的键值已经存在,且过期时间大于旧的过期时间,则更新e_time_pool的键值
         if key in self.e_time_pool and self.e_time_pool[key] > e_time:
             return
         self.e_time_pool[key] = e_time
-    def _clear(self,):
+    def safe_pop(self,x:dict,key):
+        try:
+            x.pop(key)
+        except Exception as e:
+            ...
+    def _clear(self):
         self.keep_alive = False
         self.e_time_pool.clear()
         self.lru_cache.cache.clear()
@@ -125,7 +130,7 @@ class QueryInfo:
             keys = list(self.e_time_pool.keys())
             for k in keys:
                 if f_time >= self.e_time_pool[k]:
-                    self.e_time_pool.pop(k)
+                    self.safe_pop(self.e_time_pool,k)
                     self.lru_cache.dels(k)
             time.sleep(self.heartbeat)
     def start_check_thread(self):
