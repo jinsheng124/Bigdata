@@ -34,6 +34,8 @@ class LRU:
         p_key = None
         if key in self.cache:
             # 若数据已存在，表示命中一次，需要把数据移到缓存队列末端
+            if value[1] > self.cache[key][1]:
+                self.cache[key] = value
             self.cache.move_to_end(key)
             return 
         if len(self.cache) >= self.capacity:
@@ -43,7 +45,7 @@ class LRU:
             print(f"缓存已满,淘汰最早没有使用的数据{p_key}!")
         # 录入缓存
         if self.to_json:
-            value = json.dumps(value)
+            value = (json.dumps(value[0]),value[1])
         self.cache[key]=value
         return p_key
         
@@ -58,7 +60,7 @@ class LRU:
             self.cache.move_to_end(key)
             value = self.cache[key]
             if self.to_json:
-                value = json.loads(value)
+                value = (json.loads(value[0]),value[1])
             return value
 
 class QueryInfo:
@@ -70,11 +72,10 @@ class QueryInfo:
     
     '''
     def __init__(self,max_size = 1000):
-        self.lru_cache = LRU(capacity=max_size,to_json=False)
+        self.lru_cache = LRU(capacity=max_size,to_json=True)
         # 默认停留时间为1个月
         self._nx = 60 * 60 * 24 * 3
         self.heartbeat = 3
-        self.e_time_pool = {}
         self.keep_alive = True
         # 启动线程
         self.check_thread = None
@@ -85,14 +86,13 @@ class QueryInfo:
         c_time为过期时刻,若当前时刻大于过期时刻,回收key并返回,否则返回value
         '''
         key = query()
-        c_time = self.e_time_pool.get(key,-1)
-        # 查询了过期的键值直接删除，不返回结果
-        if c_time < time.time() and c_time != -1:
-            self.e_time_pool.pop(key)
-            self.lru_cache.dels(key)
-            return
         res = self.lru_cache.query(key)
-        return res
+        # 查询了过期的键值直接删除，不返回结果
+        if res:
+            if time.time() > res[1]:
+                self.lru_cache.dels(key)
+                return
+            return res[0]
 
     def _set_info(self,query:QueryStruct,value,
                     nx = None,
@@ -110,33 +110,19 @@ class QueryInfo:
             e_time = time.time() + nx
         else:
             e_time = time.time() + self._nx
-        # p_key为被LRU淘汰的键值,若存在，同步淘汰e_time_pool的键值
-        p_key = self.lru_cache.put(key,value)
-        if p_key:
-            self.safe_pop(self.e_time_pool,p_key)
-        # 若插入的键值已经存在,且过期时间大于旧的过期时间,则更新e_time_pool的键值
-        if key in self.e_time_pool and self.e_time_pool[key] > e_time:
-            return
-        self.e_time_pool[key] = e_time
-    def safe_pop(self,x:dict,key):
-        try:
-            x.pop(key)
-        except Exception as e:
-            ...
+        self.lru_cache.put(key,value=(value,e_time))
     def _clear(self):
         self.keep_alive = False
-        self.e_time_pool.clear()
         self.lru_cache.cache.clear()
     def check_e_time(self):
         '''
-        循环遍历e_time_pool,若键值已过期,则删除该键值,并淘汰内存
+        循环遍历缓存键值,若键值已过期,则删除该键值,并淘汰内存
         '''
         while self.keep_alive:
             f_time = time.time()
-            keys = list(self.e_time_pool.keys())
+            keys = list(self.lru_cache.cache.keys())
             for k in keys:
-                if f_time >= self.e_time_pool[k]:
-                    self.safe_pop(self.e_time_pool,k)
+                if f_time >= self.lru_cache.cache[k][1]:
                     self.lru_cache.dels(k)
             time.sleep(self.heartbeat)
     def start_check_thread(self):
@@ -153,7 +139,7 @@ class QueryInfo:
 # 缓存结构
 class Query:
     # 此类调用内部类QueryInfo,同时__call__实现装饰器功能
-    def __init__(self,max_size = 1000,nx = (1800,18000)):
+    def __init__(self,max_size = 1,nx = (6,12)):
         self.query_info = QueryInfo(max_size=max_size)
         self.cache_enable = True
         if nx[0] > nx[1]:
@@ -298,6 +284,11 @@ if __name__ == "__main__":
     ex_fun.cache_enable = True
     _ = run_sql_query("select * from test")
     # print(_)
+    _ = run_sql_query("select * from test")
+    _ = run_sql_query("select id from test")
+    _ = run_sql_query("select * from test")
+    _ = run_sql_query("select * from test")
+    time.sleep(15)
     _ = run_sql_query("select * from test")
     # print(_)
     
