@@ -30,7 +30,7 @@ class LRU:
         self.cache = OrderedDict()
  
     def put(self, key, value):
-        
+        p_key = None
         if key in self.cache:
             # 若数据已存在，表示命中一次，需要把数据移到缓存队列末端
             self.cache.move_to_end(key)
@@ -38,10 +38,11 @@ class LRU:
         if len(self.cache) >= self.capacity:
             # 若缓存已满，则需要淘汰最早没有使用的数据
             _ = self.cache.popitem(last=False)
-            print(f"缓存已满,淘汰最早没有使用的数据{_[0]}!")
-            return _[0]
+            p_key = _[0]
+            print(f"缓存已满,淘汰最早没有使用的数据{p_key}!")
         # 录入缓存
         self.cache[key]=value
+        return p_key
         
     def dels(self,key):
         if key in self.cache:

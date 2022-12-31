@@ -6,7 +6,6 @@ import sys
 import warnings
 import random
 from threading import Thread
-import os
 
 import pymysql
 
@@ -31,24 +30,25 @@ class LRU:
         self.cache = OrderedDict()
  
     def put(self, key, value):
-        
+        p_key = None
         if key in self.cache:
             # 若数据已存在，表示命中一次，需要把数据移到缓存队列末端
             self.cache.move_to_end(key)
-            return
+            return 
         if len(self.cache) >= self.capacity:
             # 若缓存已满，则需要淘汰最早没有使用的数据
             _ = self.cache.popitem(last=False)
-            print(f"缓存已满,淘汰最早没有使用的数据{_[0]}!")
-            return _[0]
+            p_key = _[0]
+            print(f"缓存已满,淘汰最早没有使用的数据{p_key}!")
         # 录入缓存
         self.cache[key]=value
+        return p_key
         
     def dels(self,key):
         if key in self.cache:
-            _ = self.cache.pop(key)
+            self.cache.pop(key)
             print(f"数据{key}已被删除！")
-            return _[0]
+            return key
     # 热点数据前移
     def query(self,key):
         if key in self.cache:
@@ -76,12 +76,12 @@ class QueryInfo:
 
     def _get_info(self,query:QueryStruct):
         '''
-        OrderDict结构：key ->(value,e_time)
-        e_time为过期时刻,若当前时刻大于过期时刻,回收key并返回,否则返回value
+        c_time为过期时刻,若当前时刻大于过期时刻,回收key并返回,否则返回value
         '''
         key = query()
         c_time = self.e_time_pool.get(key,-1)
-        if c_time > time.time() and c_time != -1:
+        # 查询了过期的键值直接删除，不返回结果
+        if c_time < time.time() and c_time != -1:
             self.e_time_pool.pop(key)
             self.lru_cache.dels(key)
             return
@@ -92,9 +92,8 @@ class QueryInfo:
                     nx = None,
                     each_memory = 2):
         '''
-        nx 默认不设过期时间
+        nx 默认过期时间为3天
         each_memory: 默认每次插入的变量内存不大于2M
-        若成功插入数据,并启动延时删除线程
         '''
         key = query()
         memory = sys.getsizeof(value)/(1024**2)
@@ -105,27 +104,34 @@ class QueryInfo:
             e_time = time.time() + nx
         else:
             e_time = time.time() + self._nx
-        self.lru_cache.put(key,value)
+        # p_key为被LRU淘汰的键值,若存在，同步淘汰e_time_pool的键值
+        p_key = self.lru_cache.put(key,value)
+        if p_key:
+            self.e_time_pool.pop(p_key)
+        # 若插入的键值已经存在,且过期时间大于旧的过期时间,则更新e_time_pool的键值
         if key in self.e_time_pool and self.e_time_pool[key] > e_time:
             return
         self.e_time_pool[key] = e_time
-        self.key_pool.append(key)
     def _clear(self,):
         self.keep_alive = False
         self.e_time_pool.clear()
         self.lru_cache.cache.clear()
     def check_e_time(self):
+        '''
+        循环遍历e_time_pool,若键值已过期,则删除该键值,并淘汰内存
+        '''
         while self.keep_alive:
             f_time = time.time()
             keys = list(self.e_time_pool.keys())
             for k in keys:
                 if f_time >= self.e_time_pool[k]:
                     self.e_time_pool.pop(k)
-                    self.lru_cache.dels(key)
+                    self.lru_cache.dels(k)
             time.sleep(self.heartbeat)
     def start_check_thread(self):
         self.keep_alive = True
         if self.check_thread and not self.check_thread.is_alive():
+            print("启动监控线程！")
             self.check_thread.start()
 
 # 缓存结构
@@ -212,7 +218,7 @@ def timeit(fun):
     return wrapper
 
 # 缓存中间件
-ex_fun = Query(max_size=20000,nx = (1,3))
+ex_fun = Query(max_size=10000,nx = (1800,18000))
 
 @timeit
 @ex_fun
@@ -270,7 +276,10 @@ def run_sql_query(query,
     return data
 if __name__ == "__main__":
     _ = run_sql_query("select * from test")
-    time.sleep(1)
+    ex_fun.cache_enable = False
+    _ = run_sql_query("select * from test")
+    ex_fun.cache_enable = True
+    _ = run_sql_query("select * from test")
     _ = run_sql_query("select * from test")
     
     # ex_fun.cache_enable = False
