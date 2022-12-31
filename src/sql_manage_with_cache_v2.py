@@ -71,7 +71,7 @@ class QueryInfo:
         self.e_time_pool = {}
         self.keep_alive = True
         # 启动线程
-        self.check_thread = Thread(target=self.check_e_time)
+        self.check_thread = None
         self.start_check_thread()
 
     def _get_info(self,query:QueryStruct):
@@ -130,9 +130,12 @@ class QueryInfo:
             time.sleep(self.heartbeat)
     def start_check_thread(self):
         self.keep_alive = True
-        if self.check_thread and not self.check_thread.is_alive():
-            print("启动监控线程！")
+        if (self.check_thread and not self.check_thread.is_alive()) or (self.check_thread is None):
+            self.check_thread = None
+            self.check_thread = Thread(target=self.check_e_time)
+            self.check_thread.setDaemon(daemonic=True)
             self.check_thread.start()
+            print("启动监控线程！")
 
 # 缓存结构
 class Query:
@@ -179,6 +182,7 @@ class Query:
                     muti_query: bool = False,
                     ex_many_mode: bool = False):
             if self.cache_enable:
+                # 尝试启动监控线程
                 self.query_info.start_check_thread()
                 data = None
                 flag = self.check_query(query)
@@ -199,7 +203,7 @@ class Query:
                     nx = random.randint(*self.nx)
                     self.query_info._set_info(QueryStruct(host,db,low_query), data, nx = nx)
             else:
-                # 清除缓存
+                # 清除缓存,关闭监控线程
                 self.clearcache()
                 data = fun(query,host,user,password,db,args,
                         return_dict,autocommit,muti_query,ex_many_mode)
