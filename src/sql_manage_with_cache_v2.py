@@ -6,7 +6,7 @@ import sys
 import warnings
 import random
 from threading import Thread
-
+import json
 import pymysql
 
 
@@ -25,9 +25,10 @@ class QueryStruct:
 
 # LRU算法
 class LRU:
-    def __init__(self, capacity = 128):
+    def __init__(self, capacity = 128,to_json = True):
         self.capacity = capacity
         self.cache = OrderedDict()
+        self.to_json = to_json
  
     def put(self, key, value):
         p_key = None
@@ -41,6 +42,8 @@ class LRU:
             p_key = _[0]
             print(f"缓存已满,淘汰最早没有使用的数据{p_key}!")
         # 录入缓存
+        if self.to_json:
+            value = json.dumps(value)
         self.cache[key]=value
         return p_key
         
@@ -53,7 +56,10 @@ class LRU:
     def query(self,key):
         if key in self.cache:
             self.cache.move_to_end(key)
-            return self.cache[key]
+            value = self.cache[key]
+            if self.to_json:
+                value = json.loads(value)
+            return value
 
 class QueryInfo:
     '''
@@ -64,7 +70,7 @@ class QueryInfo:
     
     '''
     def __init__(self,max_size = 1000):
-        self.lru_cache = LRU(capacity=max_size)
+        self.lru_cache = LRU(capacity=max_size,to_json=False)
         # 默认停留时间为1个月
         self._nx = 60 * 60 * 24 * 3
         self.heartbeat = 3
@@ -72,7 +78,6 @@ class QueryInfo:
         self.keep_alive = True
         # 启动线程
         self.check_thread = None
-        self.start_check_thread()
 
     def _get_info(self,query:QueryStruct):
         '''
@@ -284,12 +289,14 @@ def run_sql_query(query,
         data = data[0]
     return data
 if __name__ == "__main__":
-    _ = run_sql_query("select * from test")
     ex_fun.cache_enable = False
+    _ = run_sql_query("select * from test")
     _ = run_sql_query("select * from test")
     ex_fun.cache_enable = True
     _ = run_sql_query("select * from test")
+    # print(_)
     _ = run_sql_query("select * from test")
+    # print(_)
     
     # ex_fun.cache_enable = False
     
