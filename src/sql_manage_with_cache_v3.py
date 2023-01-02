@@ -71,7 +71,7 @@ class QueryInfo:
     '''
     def __init__(self,max_size = 1000):
         self.lru_cache = LRU(capacity=max_size,to_json=False)
-        # 默认停留时间为1个月
+        # 默认停留时间为3天
         self._nx = 60 * 60 * 24 * 3
         self.tick = 1
         self.keep_alive = True
