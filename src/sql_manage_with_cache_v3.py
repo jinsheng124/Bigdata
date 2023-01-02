@@ -75,15 +75,15 @@ class QueryInfo:
         self._nx = 60 * 60 * 24 * 3
         self.tick = 1
         self.keep_alive = True
-        # 启动线程
+        # 监控线程,每tick秒删除过期key值
         self.check_thread = None
-        # 小根堆，按时间排序,每tick秒删除过期key值
+        # 小根堆,节点为(e_time,key)
         self.heap = []
         self.lock = Lock()
 
     def _get_info(self,query:QueryStruct):
         '''
-        c_time为过期时刻,若当前时刻大于过期时刻,回收key并返回,否则返回value
+        查找键值
         '''
         key = query()
         res = self.lru_cache.query(key)
@@ -94,7 +94,7 @@ class QueryInfo:
                     each_memory = 10):
         '''
         nx 默认过期时间为3天
-        each_memory: 默认每次插入的变量内存不大于2M
+        each_memory: 默认每次插入的变量内存不大于10M
         '''
         key = query()
         memory = sys.getsizeof(value)/(1024**2)
@@ -113,12 +113,14 @@ class QueryInfo:
         self.heap.clear()
     def check_e_time(self):
         '''
-        循环遍历缓存键值,若键值已过期,则删除该键值,并淘汰内存
+        依次查找堆顶,删除过期的键值对
         '''
         while self.keep_alive:
             f_time = time.time()
             while self.heap:
-                item = heapq.nsmallest(1,self.heap)[0]
+                # 堆顶为最小值
+                item = self.heap[0]
+                # 最小值也大于当前时间戳,说明没过期的内存
                 if item[0] > f_time:
                     break
                 heapq.heappop(self.heap)
