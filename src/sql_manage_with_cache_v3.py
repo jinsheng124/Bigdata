@@ -44,10 +44,10 @@ class LRU:
             print(f"缓存已满,淘汰最早没有使用的数据{p_key}!")
         # 录入缓存
         if self.to_json:
-            value = json.dumps(value)
+            value = (json.dumps(value[0]),value[1])
         self.cache[key]=value
         
-    def dels(self,key):
+    def discard(self,key):
         if key in self.cache:
             self.cache.pop(key)
             print(f"数据{key}已被删除！")
@@ -58,7 +58,7 @@ class LRU:
             self.cache.move_to_end(key)
             value = self.cache[key]
             if self.to_json:
-                value = json.loads(value)
+                value = (json.loads(value[0]),value[1])
             return value
 
 class QueryInfo:
@@ -71,6 +71,7 @@ class QueryInfo:
     '''
     def __init__(self,max_size = 1000):
         self.lru_cache = LRU(capacity=max_size,to_json=False)
+        self.max_size = max_size
         # 默认停留时间为3天
         self._nx = 60 * 60 * 24 * 3
         self.tick = 1
@@ -87,7 +88,8 @@ class QueryInfo:
         '''
         key = query()
         res = self.lru_cache.query(key)
-        return res
+        if res:
+            return res[0]
 
     def _set_info(self,query:QueryStruct,value,
                     nx = None,
@@ -105,7 +107,7 @@ class QueryInfo:
             e_time = time.time() + nx
         else:
             e_time = time.time() + self._nx
-        self.lru_cache.put(key,value)
+        self.lru_cache.put(key,(value,e_time))
         heapq.heappush(self.heap,(e_time,key))
     def _clear(self):
         self.keep_alive = False
@@ -113,18 +115,24 @@ class QueryInfo:
         self.heap.clear()
     def check_e_time(self):
         '''
-        依次查找堆顶,删除过期的键值对
+        依次查找堆顶,删除过期的键值对,这里或许需要考虑线程安全的问题
         '''
         while self.keep_alive:
+            if len(self.heap) > 2 * self.max_size:
+                # 数据偏离太大,利用缓存中的键值重新建堆,O(n)
+                tmp = []
+                for k,v in self.lru_cache.cache.items():
+                    tmp.append((v[1],k))
+                self.heap = heapq.heapify(tmp)
             f_time = time.time()
             while self.heap:
                 # 堆顶为最小值
                 item = self.heap[0]
-                # 最小值也大于当前时间戳,说明没过期的内存
+                # 最小值也大于当前时间戳,说明没过期的内存,O(klogn)
                 if item[0] > f_time:
                     break
                 heapq.heappop(self.heap)
-                self.lru_cache.dels(item[1])
+                self.lru_cache.discard(item[1])
             time.sleep(self.tick)
     def start_check_thread(self):
         self.keep_alive = True
