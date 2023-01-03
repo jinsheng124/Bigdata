@@ -123,7 +123,8 @@ class QueryInfo:
                 tmp = []
                 for k,v in self.lru_cache.cache.items():
                     tmp.append((v[1],k))
-                self.heap = heapq.heapify(tmp)
+                heapq.heapify(tmp)
+                self.heap = tmp
             f_time = time.time()
             while self.heap:
                 # 堆顶为最小值
