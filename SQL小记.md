@@ -2,16 +2,14 @@
 
 ## 关联更新SQL:
 
-以error_record为例
+以student_record为例
 ```
-//先增加新列sub_brand
-alter table error_record add sub_brand varchar(40) default null comment "子商标"; 
+//先增加新列class
+alter table student_record add class tinyint default null comment "班级"; 
 
-//将表error_record的sub_brand字段更新为表map_brand的商标字段，关联字段brand
+//将表student_record的class字段更新为表map_id_class的class字段，关联字段id
 
-update error_record a,map_brand b set a.sub_brand=b.`商标` where a.brand = b.brand; 
-//更新完毕后删除error_record的brand列
-alter table error_record drop column brand;
+update student_record a,map_id_class b set a.class=b.class where a.id = b.id; 
 ```
 
 ## 删除重复数据,只保留一行：
