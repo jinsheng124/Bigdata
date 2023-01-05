@@ -5,7 +5,7 @@ from collections import OrderedDict
 import sys
 import warnings
 import random
-from threading import Thread,Lock
+from threading import Thread,RLock
 import json
 import heapq
 
@@ -80,7 +80,7 @@ class QueryInfo:
         self.check_thread = None
         # 小根堆,节点为(e_time,key)
         self.heap = []
-        self.lock = Lock()
+        self._lock = RLock()
 
     def _get_info(self,query:QueryStruct):
         '''
@@ -137,14 +137,18 @@ class QueryInfo:
             time.sleep(self.tick)
     def start_check_thread(self):
         self.keep_alive = True
-        self.lock.acquire()
-        if (self.check_thread and not self.check_thread.is_alive()) or (self.check_thread is None):
-            self.check_thread = None
-            self.check_thread = Thread(target=self.check_e_time)
-            self.check_thread.setDaemon(daemonic=True)
-            self.check_thread.start()
-            print("启动监控线程！")
-        self.lock.release()
+        if self.check_thread and self.check_thread.is_alive():
+            return
+        with self._lock:
+            if self.check_thread:
+                if not self.check_thread.is_alive():
+                    self.check_thread.start()
+                    print("启动监控线程！")
+            else:
+                self.check_thread = Thread(target=self.check_e_time)
+                self.check_thread.setDaemon(daemonic=True)
+                self.check_thread.start()
+                print("启动监控线程！")
 
 # 缓存结构
 class Query:
