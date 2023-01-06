@@ -25,43 +25,48 @@ class QueryStruct:
         key = hashlib.md5(key.encode()).hexdigest()
         return key
 
-# LRU算法
+# 安全LRU算法
 class LRU:
     def __init__(self, capacity = 128,to_json = True):
         self.capacity = capacity
         self.cache = OrderedDict()
         self.to_json = to_json
- 
+        self._lock = RLock()
+    def _query(self,key,discard = False):
+        '''加锁安全查询'''
+        if key not in self.cache:
+            return
+        with self._lock:
+            if key in self.cache:
+                value = self.cache.pop(key)
+                if not discard:
+                    self.cache[key] = value
+                    return value
+                else:
+                    print(f"数据{key}已被删除！")
     def put(self, key, value):
-        if key in self.cache:
-            # 若数据已存在，表示命中一次，需要把数据移到缓存队列末端
-            self.cache.move_to_end(key)
-            return 
+        _value = self._query(key)
+        if _value is not None:
+            return
         if len(self.cache) >= self.capacity:
             # 若缓存已满，则需要淘汰最早没有使用的数据
             _ = self.cache.popitem(last=False)
-            p_key = _[0]
-            print(f"缓存已满,淘汰最早没有使用的数据{p_key}!")
+            print(f"缓存已满,淘汰最早没有使用的数据{_[0]}!")
         # 录入缓存
         if self.to_json:
             value = (json.dumps(value[0]),value[1])
         self.cache[key]=value
         
     def discard(self,key):
-        if key in self.cache:
-            self.cache.pop(key)
-            print(f"数据{key}已被删除！")
-            return key
+        return self._query(key,discard=True)
     # 热点数据前移
     def query(self,key):
-        if key in self.cache:
-            self.cache.move_to_end(key)
-            value = self.cache[key]
-            if self.to_json:
-                value = (json.loads(value[0]),value[1])
-            return value
+        value = self._query(key)
+        if value is not None and self.to_json:
+            value = (json.loads(value[0]),value[1])
+        return value
 
-class QueryInfo:
+class QueryInfo(LRU):
     '''
     缓存类
     _get_info: 取缓存数据
@@ -69,25 +74,28 @@ class QueryInfo:
     _delaydel: 设置过期时间,延时删除
     
     '''
-    def __init__(self,max_size = 1000):
-        self.lru_cache = LRU(capacity=max_size,to_json=False)
-        self.max_size = max_size
+    def __init__(self,capacity = 10000,to_json = False):
+        super(QueryInfo,self).__init__()
+        self.to_json = to_json
+        self.capacity = capacity
+        # self.lru_cache = LRU(capacity=max_size,to_json=False)
+        # self.max_size = max_size
         # 默认停留时间为3天
-        self._nx = 60 * 60 * 24 * 3
+        self.default_nx = 60 * 60 * 24 * 3
         self.tick = 1
         self.keep_alive = True
         # 监控线程,每tick秒删除过期key值
         self.check_thread = None
         # 小根堆,节点为(e_time,key)
         self.heap = []
-        self._lock = RLock()
+        # self._lock = RLock()
 
     def _get_info(self,query:QueryStruct):
         '''
         查找键值
         '''
         key = query()
-        res = self.lru_cache.query(key)
+        res = self.query(key)
         if res:
             return res[0]
 
@@ -106,22 +114,22 @@ class QueryInfo:
         if nx:
             e_time = time.time() + nx
         else:
-            e_time = time.time() + self._nx
-        self.lru_cache.put(key,(value,e_time))
+            e_time = time.time() + self.default_nx
+        self.put(key,(value,e_time))
         heapq.heappush(self.heap,(e_time,key))
     def _clear(self):
         self.keep_alive = False
-        self.lru_cache.cache.clear()
+        self.cache.clear()
         self.heap.clear()
     def check_e_time(self):
         '''
-        依次查找堆顶,删除过期的键值对,这里或许需要考虑线程安全的问题
+        依次查找堆顶,删除过期的键值对
         '''
         while self.keep_alive:
-            if len(self.heap) > 2 * self.max_size:
+            if len(self.heap) > 2 * self.capacity:
                 # 数据偏离太大,利用缓存中的键值重新建堆,O(n)
                 tmp = []
-                for k,v in self.lru_cache.cache.items():
+                for k,v in self.cache.items():
                     tmp.append((v[1],k))
                 heapq.heapify(tmp)
                 self.heap = tmp
@@ -133,7 +141,7 @@ class QueryInfo:
                 if item[0] > f_time:
                     break
                 heapq.heappop(self.heap)
-                self.lru_cache.discard(item[1])
+                self.discard(item[1])
             time.sleep(self.tick)
     def start_check_thread(self):
         self.keep_alive = True
@@ -153,8 +161,9 @@ class QueryInfo:
 # 缓存结构
 class Query:
     # 此类调用内部类QueryInfo,同时__call__实现装饰器功能
-    def __init__(self,max_size = 1,nx = (6,12)):
-        self.query_info = QueryInfo(max_size=max_size)
+    def __init__(self,capacity = 1,nx = (6,12)):
+        self.query_info = QueryInfo(capacity=capacity,
+                                    to_json = False)
         self.cache_enable = True
         if nx[0] > nx[1]:
             raise ValueError('起始时间必须小于终止时间！')
@@ -235,7 +244,7 @@ def timeit(fun):
     return wrapper
 
 # 缓存中间件
-ex_fun = Query(max_size=10000,nx = (1800,18000))
+ex_fun = Query(capacity=10000,nx = (1800,18000))
 
 @timeit
 @ex_fun
@@ -299,6 +308,7 @@ if __name__ == "__main__":
     _ = run_sql_query("select * from test")
     print(_)
     _ = run_sql_query("select * from test")
+    print(_)
     _ = run_sql_query("select id from test")
     _ = run_sql_query("select * from test")
     _ = run_sql_query("select * from test")
