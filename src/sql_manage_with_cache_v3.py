@@ -78,8 +78,6 @@ class QueryInfo(LRU):
         super(QueryInfo,self).__init__()
         self.to_json = to_json
         self.capacity = capacity
-        # self.lru_cache = LRU(capacity=max_size,to_json=False)
-        # self.max_size = max_size
         # 默认停留时间为3天
         self.default_nx = 60 * 60 * 24 * 3
         self.tick = 1
@@ -88,7 +86,6 @@ class QueryInfo(LRU):
         self.check_thread = None
         # 小根堆,节点为(e_time,key)
         self.heap = []
-        # self._lock = RLock()
 
     def _get_info(self,query:QueryStruct):
         '''
