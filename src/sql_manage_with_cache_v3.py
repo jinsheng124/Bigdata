@@ -145,15 +145,11 @@ class QueryInfo(LRU):
         if self.check_thread and self.check_thread.is_alive():
             return
         with self._lock:
-            if self.check_thread:
-                if not self.check_thread.is_alive():
-                    self.check_thread.start()
-                    print("启动监控线程！")
-            else:
-                self.check_thread = Thread(target=self.check_e_time)
-                self.check_thread.setDaemon(daemonic=True)
-                self.check_thread.start()
-                print("启动监控线程！")
+            self.check_thread = None
+            self.check_thread = Thread(target=self.check_e_time)
+            self.check_thread.setDaemon(daemonic=True)
+            self.check_thread.start()
+            print("启动监控线程！")
 
 # 缓存结构
 class Query:
@@ -308,6 +304,9 @@ if __name__ == "__main__":
     print(_)
     _ = run_sql_query("select id from test")
     _ = run_sql_query("select * from test")
+    ex_fun.clearcache()
+    print("清除缓存")
+    time.sleep(2)
     _ = run_sql_query("select * from test")
     time.sleep(15)
     _ = run_sql_query("select * from test")
