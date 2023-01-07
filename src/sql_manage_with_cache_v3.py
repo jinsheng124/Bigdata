@@ -114,16 +114,17 @@ class QueryInfo(LRU):
             e_time = time.time() + self.default_nx
         self.put(key,(value,e_time))
         heapq.heappush(self.heap,(e_time,key))
-    def _gc(self):
-        self.keep_alive = False
-        # 确保线程被关闭
-        dp = self.tick
-        if self.check_thread:
-            while self.check_thread.is_alive():
+    def _clear(self,shut_down_thread:bool):
+        if shut_down_thread:
+            # 确保线程被关闭
+            self.keep_alive = False
+            dp = self.tick
+            while self.check_thread and self.check_thread.is_alive():
                 time.sleep(dp)
                 dp /= 2
-            self.heap.clear()
-            self.cache.clear()
+            print("回收监控线程成功！")
+        self.heap.clear()
+        self.cache.clear()
 
     def check_e_time(self):
         '''
@@ -168,6 +169,7 @@ class Query:
         self.query_info = QueryInfo(capacity=capacity,
                                     to_json = False)
         self.cache_enable = True
+        self.start_cache()
         if nx[0] > nx[1]:
             raise ValueError('起始时间必须小于终止时间！')
         self.nx = nx
@@ -193,8 +195,17 @@ class Query:
             lower_query += c
             
         return lower_query
-    def clearcache(self):
-        self.query_info._gc()         
+    def gc_cache(self,only_clear_cache = True):
+        # 回收线程和清除内存接口
+        if only_clear_cache:
+            self.query_info._clear(shut_down_thread = False)
+        else:
+            self.cache_enable = False
+            self.query_info._clear(shut_down_thread=True)
+    def start_cache(self):
+        # 启用缓存功能
+        self.cache_enable = True
+        self.query_info.start_check_thread()
     def __call__(self, fun):
         def wrapper(query:str,
                     host = 'localhost',
@@ -207,8 +218,6 @@ class Query:
                     muti_query: bool = False,
                     ex_many_mode: bool = False):
             if self.cache_enable:
-                # 尝试启动监控线程
-                self.query_info.start_check_thread()
                 data = None
                 flag = self.check_query(query)
                 low_query = self._lower(query)
@@ -228,8 +237,6 @@ class Query:
                     nx = random.randint(*self.nx)
                     self.query_info._set_info(QueryStruct(host,db,low_query), data, nx = nx)
             else:
-                # 清除缓存,关闭监控线程
-                self.clearcache()
                 data = fun(query,host,user,password,db,args,
                         return_dict,autocommit,muti_query,ex_many_mode)
             return data
@@ -304,20 +311,21 @@ def run_sql_query(query,
         data = data[0]
     return data
 if __name__ == "__main__":
-    ex_fun.cache_enable = False
-    _ = run_sql_query("select * from test")
-    _ = run_sql_query("select * from test")
-    ex_fun.cache_enable = True
     _ = run_sql_query("select * from test")
     print(_)
     _ = run_sql_query("select * from test")
     print(_)
     _ = run_sql_query("select id from test")
     _ = run_sql_query("select * from test")
-    ex_fun.clearcache()
-    print("清除缓存")
+
+    ex_fun.gc_cache(only_clear_cache=False)
+
     _ = run_sql_query("select * from test")
-    time.sleep(15)
+    _ = run_sql_query("select * from test")
+
+    ex_fun.start_cache()
+
+    _ = run_sql_query("select * from test")
     _ = run_sql_query("select * from test")
     print(_)
     
