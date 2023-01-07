@@ -135,9 +135,7 @@ class QueryInfo(LRU):
                 # 数据偏离太大,利用缓存中的键值重新建堆,O(n)
                 with self._lock:
                     # 加锁,防止遍历字典时字典被更新
-                    tmp = []
-                    for k,v in self.cache.items():
-                        tmp.append((v[1],k))
+                    tmp = [(v[1],k) for k,v in self.cache.items()]
                     heapq.heapify(tmp)
                     self.heap = tmp
             f_time = time.time()
