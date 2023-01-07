@@ -114,22 +114,31 @@ class QueryInfo(LRU):
             e_time = time.time() + self.default_nx
         self.put(key,(value,e_time))
         heapq.heappush(self.heap,(e_time,key))
-    def _clear(self):
+    def _gc(self):
         self.keep_alive = False
-        self.cache.clear()
-        self.heap.clear()
+        # 确保线程被关闭
+        dp = self.tick
+        if self.check_thread:
+            while self.check_thread.is_alive():
+                time.sleep(dp)
+                dp /= 2
+            self.heap.clear()
+            self.cache.clear()
+
     def check_e_time(self):
         '''
         依次查找堆顶,删除过期的键值对
         '''
         while self.keep_alive:
-            if len(self.heap) > 2 * self.capacity:
+            if len(self.heap) > 3 * self.capacity:
                 # 数据偏离太大,利用缓存中的键值重新建堆,O(n)
-                tmp = []
-                for k,v in self.cache.items():
-                    tmp.append((v[1],k))
-                heapq.heapify(tmp)
-                self.heap = tmp
+                with self._lock:
+                    # 加锁,防止遍历字典时字典被更新
+                    tmp = []
+                    for k,v in self.cache.items():
+                        tmp.append((v[1],k))
+                    heapq.heapify(tmp)
+                    self.heap = tmp
             f_time = time.time()
             while self.heap:
                 # 堆顶为最小值
@@ -184,7 +193,7 @@ class Query:
             
         return lower_query
     def clearcache(self):
-        self.query_info._clear()         
+        self.query_info._gc()         
     def __call__(self, fun):
         def wrapper(query:str,
                     host = 'localhost',
@@ -306,7 +315,6 @@ if __name__ == "__main__":
     _ = run_sql_query("select * from test")
     ex_fun.clearcache()
     print("清除缓存")
-    time.sleep(2)
     _ = run_sql_query("select * from test")
     time.sleep(15)
     _ = run_sql_query("select * from test")
