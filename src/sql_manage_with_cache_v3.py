@@ -301,11 +301,10 @@ def run_sql_query(query,
             data.append(cursor.fetchall())
     except Exception as e:
         conn.rollback()
+        raise pymysql.err.ProgrammingError(f'执行{inspect.stack()[0][3]}方法出现错误，错误代码：{e}')
+    finally:
         cursor.close()
         conn.close()
-        raise pymysql.err.ProgrammingError(f'执行{inspect.stack()[0][3]}方法出现错误，错误代码：{e}')
-    cursor.close()
-    conn.close()
     # 兼容原来的单条查询格式
     if len(data) == 1:
         data = data[0]
