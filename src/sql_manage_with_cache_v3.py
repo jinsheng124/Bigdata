@@ -1,12 +1,12 @@
 import time
 import inspect
-import hashlib
 from collections import OrderedDict
 import sys
 import warnings
 import random
 from threading import Thread,RLock
 import json
+import hashlib
 import heapq
 
 import pymysql
@@ -14,16 +14,29 @@ import pymysql
 
 # 查询唯一标识结构体
 class QueryStruct:
-    def __init__(self,host:str,db:str,query:str):
+    def __init__(self,host:str,db:str,query:str,is_encryption = False):
         # 主机名、数据库名、查询语句
-        self.host = host
-        self.db = db
-        self.query = query
-    def __call__(self):
+        self.__host = host
+        self.__db = db
+        self.__query = query
+        self.is_encryption = is_encryption
+    # MD5加密
+    def encryption(self,key:str):
         # MD5加密生成key
-        key = str(self.db) + str(self.host) + str(self.query)
-        key = hashlib.md5(key.encode()).hexdigest()
-        return key
+        return hashlib.md5(key.encode()).hexdigest()
+    # 重写类比较
+    def __eq__(self, other) -> bool:
+        return (self.__host == other.__host) and (self.__db == other.__db)\
+             and (self.__query == other.__query)
+    # 重写hash
+    def __hash__(self) -> int:
+        return hash((self.__host,self.__db,self.__query))
+    # 重写print行为
+    def __str__(self):
+        p_str = f"{self.__host}/{self.__db}: {self.__query}"
+        if self.is_encryption:
+            p_str = self.encryption(p_str)
+        return p_str
 
 # 安全LRU算法
 class LRU:
@@ -32,7 +45,7 @@ class LRU:
         self.cache = OrderedDict()
         self.to_json = to_json
         self._lock = RLock()
-    def _query(self,key,discard = False):
+    def _query(self,key:QueryStruct,discard = False):
         '''加锁安全查询'''
         if key not in self.cache:
             return
@@ -50,8 +63,8 @@ class LRU:
             return
         if len(self.cache) >= self.capacity:
             # 若缓存已满，则需要淘汰最早没有使用的数据
-            _ = self.cache.popitem(last=False)
-            print(f"缓存已满,淘汰最早没有使用的数据{_[0]}!")
+            _ = self.cache.popitem(last=False)[0]
+            print(f"缓存已满,淘汰最早没有使用的数据{key}!")
         # 录入缓存
         if self.to_json:
             value = (json.dumps(value[0]),value[1])
@@ -85,23 +98,21 @@ class QueryInfo(LRU):
         # 小根堆,节点为(e_time,key)
         self.heap = []
 
-    def _get_info(self,query:QueryStruct):
+    def _get_info(self,key:QueryStruct):
         '''
         查找键值
         '''
-        key = query()
         res = self.query(key)
         if res:
             return res[0]
 
-    def _set_info(self,query:QueryStruct,value,
+    def _set_info(self,key:QueryStruct,value,
                     nx = None,
                     each_memory = 10):
         '''
         nx 默认过期时间为3天
         each_memory: 默认每次插入的变量内存不大于10M
         '''
-        key = query()
         memory = sys.getsizeof(value)/(1024**2)
         if memory > each_memory:
             warnings.warn(f'变量内存超过{each_memory}M,将不会写入缓存！')
@@ -321,6 +332,9 @@ if __name__ == "__main__":
     ex_fun.start_cache()
 
     _ = run_sql_query("select * from test")
+    time.sleep(15)
+    _ = run_sql_query("select * from test")
+    print(_)
     _ = run_sql_query("select * from test")
     print(_)
     
