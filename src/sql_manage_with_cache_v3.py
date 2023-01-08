@@ -75,9 +75,7 @@ class QueryInfo(LRU):
     
     '''
     def __init__(self,capacity = 10000,to_json = False):
-        super(QueryInfo,self).__init__()
-        self.to_json = to_json
-        self.capacity = capacity
+        super(QueryInfo,self).__init__(capacity=capacity,to_json=to_json)
         # 默认停留时间为3天
         self.default_nx = 60 * 60 * 24 * 3
         self.tick = 1
