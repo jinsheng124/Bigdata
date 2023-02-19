@@ -46,7 +46,7 @@ void nms(std::vector<std::vector<float>> boxes, std::vector<float> confidences, 
         {
             auto iou = get_iou_value(boxes[i], boxes[idx[j + 1]]);
             if (iou < nmsThreshold) {
-                //ovr.emplace_back(idx[j + 1]);
+                ovr.emplace_back(idx[j + 1]);
             }
         }
         idx = ovr;
